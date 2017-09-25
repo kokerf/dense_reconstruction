@@ -1,0 +1,20 @@
+%YAML:1.0
+
+# Camera calibration parameters (OpenCV)
+Camera.fx: 481.2
+Camera.fy: -480.0
+Camera.cx: 319.5
+Camera.cy: 239.5
+
+Camera.width: 640
+Camera.height: 480
+
+Camera.fps: 30
+
+Seed.minGrad: 40
+Seed.initVar: 2
+
+DepthFilter.minEplGrad: 20
+DepthFilter.minEplAngle: 0.3
+DepthFilter.maxNCCError: 0.8
+DepthFilter.pixelError: 1.0
