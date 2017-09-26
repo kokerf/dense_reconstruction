@@ -16,12 +16,12 @@ public:
     Seed(Frame::Ptr _frame, Eigen::Vector3d _f, double _depth_mean, double _depth_min);
 
     inline void update(const double z, const double var2) {
-        mu = (sigma2*mu + var2/z)/(sigma2 + var2);
+        mu = (var2*mu + sigma2*z)/(sigma2 + var2);
         sigma2 = (sigma2 * var2)/(sigma2 + var2);
     }
 
     inline Eigen::Vector3d toMapPoint(){
-        return frame->c2w(f) / mu;
+        return mu * frame->c2w(f);
     }
 
 public:
@@ -51,7 +51,7 @@ public:
 
     void showEpipolarMatch(const cv::Mat& ref, const cv::Mat& curr, const Eigen::Vector2d& px_ref, const Eigen::Vector2d& px_curr);
 
-    void showEpipolarLine(const cv::Mat& ref, const cv::Mat& curr, const Eigen::Vector2d& px_ref, const Eigen::Vector2d& px_min_curr, const Eigen::Vector2d& px_max_curr);
+    void showEpipolarLine(const cv::Mat& ref, const cv::Mat& curr, const Eigen::Vector2d& px_ref, const Eigen::Vector2d &px_curr, const Eigen::Vector2d& px_min_curr, const Eigen::Vector2d& px_max_curr);
 
  private:
 
@@ -59,18 +59,19 @@ public:
 
     bool searchEpipolarLine(const Frame::Ptr reference, const Frame::Ptr current,
                             const Sophus::SE3 T_cur_ref, const Eigen::Vector3d &ft_ref,
-                            const double depth_min, const double depth_max,
-                            Eigen::Vector3d &ft_cur, double& ncc_err);
+                            double depth_min, double depth_max,
+                            Eigen::Vector3d &ft_cur, double& ncc_score);
 
     void rangePoint(Eigen::Vector2d& px, const Eigen::Vector2d& dir);
 
-    double NCC(const cv::Mat &img_ref, const cv::Mat &img_cur, const Eigen::Vector2i &pt_ref, const Eigen::Vector2i &pt_cur);
+    double NCC(const cv::Mat &img_ref, const cv::Mat &img_cur, const Eigen::Vector2d &pt_ref, const Eigen::Vector2d &pt_cur);
 
     float interpolateMat_32f(const cv::Mat& mat, const float u, const float v);
+    float interpolateMat_8u(const cv::Mat& mat, const float u, const float v);
 
     double triangulate(const Eigen::Vector3d& ft_ref, const Eigen::Vector3d& ft_cur, const Sophus::SE3& T_ref_cur);
 
-    double calcVariance(const Eigen::Vector3d& f, const Eigen::Vector3d& t, const double z, double px_error);
+    double calcVariance(const Eigen::Vector3d& f, const Sophus::SE3 &T_cur_ref, const double d, double px_error);
 
     DepthFilter getWarpMatrixAffine(
             const Frame::Ptr reference, const Frame::Ptr current,

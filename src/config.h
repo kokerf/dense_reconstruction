@@ -31,7 +31,7 @@ public:
 
     static double minEplAngle2(){return getInstance().depth_fliter_minEplAngle2;}
 
-    static double maxNCCError(){return getInstance().depth_fliter_maxNCCError;}
+    static double minNCCScore(){return getInstance().depth_fliter_minNCCScore;}
 
     static double pixelError(){return getInstance().depth_fliter_pixelError;}
 
@@ -81,7 +81,7 @@ private:
         depth_fliter_minEplAngle2 = (double)fs["DepthFilter.minEplAngle"];
         depth_fliter_minEplAngle2 *= depth_fliter_minEplAngle2;
 
-        depth_fliter_maxNCCError = (double)fs["DepthFilter.maxNCCError"];
+        depth_fliter_minNCCScore = (double)fs["DepthFilter.minNCCScore"];
 
         depth_fliter_pixelError = (double)fs["DepthFilter.pixelError"];
 
@@ -109,7 +109,7 @@ private:
 
     double depth_fliter_minEplGrad2;
     double depth_fliter_minEplAngle2;
-    double depth_fliter_maxNCCError;
+    double depth_fliter_minNCCScore;
     double depth_fliter_pixelError;
 
 };

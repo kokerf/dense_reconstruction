@@ -12,6 +12,8 @@ public:
 
     void update(const std::vector<Eigen::Vector3d>& points);
 
+    void update(const std::vector<Eigen::Vector3d>& points, const std::vector<double>& vars);
+
     void update(const pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud);
 
     typedef std::shared_ptr<PclViewer> Ptr;

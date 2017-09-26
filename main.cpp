@@ -1,4 +1,5 @@
 #include <iostream>
+#include <math.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -34,36 +35,42 @@ int main(int argc, char const *argv[])
     }
 
     PclViewer pcl_viewer("mapping");
-    DepthFilter depth_ilter;
+    DepthFilter depth_filter;
 
-    Sophus::SE3 Wc;
+    Sophus::SE3 T_r_w;
     Sophus::SE3 C2W;
-    dataset[0].getPose(Wc);
-    C2W = Wc.inverse();
-    for (std::vector<DatasetEntry>::iterator data_itr = dataset.begin(); data_itr != dataset.end(); data_itr+=3)
+    dataset[0].getPose(T_r_w);
+    C2W = T_r_w.inverse();
+
+    for (std::vector<DatasetEntry>::iterator data_itr = dataset.begin(); data_itr != dataset.end(); data_itr+=2)
     {
         cv::Mat image;
-        data_itr->getImage(image, cv::IMREAD_GRAYSCALE);
+        if(!data_itr->getImage(image, cv::IMREAD_GRAYSCALE))
+            break;
 
         Sophus::SE3 pose;
-        data_itr->getPose(pose);
+        if(!data_itr->getPose(pose))
+            break;
 
-        pose = C2W*pose;
+        //! 数据集就是这样的
+        pose = pose.inverse() * T_r_w;
+
         Frame::Ptr frame = std::make_shared<Frame>(Frame(image, 0, K, pose));
 
-        depth_ilter.addFrame(frame);
+        depth_filter.addFrame(frame);
 
         std::vector<Eigen::Vector3d> mpts;
         std::vector<double> vars;
 
-        depth_ilter.getAllPoints(mpts, vars);
+        depth_filter.getAllPoints(mpts, vars);
 
-        pcl_viewer.update(mpts);
+        pcl_viewer.update(mpts, vars);
 
         cv::imshow("image", image);
+        cv::imshow("gradx", frame->getGradxInLevel(0));
+        cv::imshow("grady", frame->getGradyInLevel(0));
         cv::waitKey(0);
     }
-
 
 
     return 0;

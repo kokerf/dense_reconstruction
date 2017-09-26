@@ -7,7 +7,7 @@ const cv::Mat kernel1 = (cv::Mat_<float>(3, 3) << -1, 0, 1, -2, 0, 2, -1, 0, 1);
 const cv::Mat kernel2 = (cv::Mat_<float>(3,3)<< -1,-2,-1, 0, 0, 0, 1, 2, 1);
 
 Frame::Frame(cv::Mat &img, int max_level, cv::Mat& K, Sophus::SE3& pose):
-        id_(frame_counter++), pose_(pose), Tc2w_(pose_.inverse())
+        id_(frame_counter++), pose_(pose), T_w_c_(pose_.inverse())
 {
     K_ = K.clone();
     invK_ = K_.inv();
@@ -20,6 +20,8 @@ Frame::Frame(cv::Mat &img, int max_level, cv::Mat& K, Sophus::SE3& pose):
     ify_ = invK_.at<double>(1,1);
     icx_ = invK_.at<double>(0,2);
     icy_ = invK_.at<double>(1,2);
+
+    eigK_ << fx_,0,cx_,0,fy_,cy_,0,0,1;
 
     width_ = img.cols;
     height_ = img.rows;

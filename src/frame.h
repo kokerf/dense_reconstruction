@@ -28,16 +28,18 @@ public:
 
     inline const cv::Mat& getGradxInLevel(int i) const { return grad_x_pyr_[i];}
 
-    inline const cv::Mat& getGradyInLevel(int i) const { return grad_x_pyr_[i];}
+    inline const cv::Mat& getGradyInLevel(int i) const { return grad_y_pyr_[i];}
 
-    inline Eigen::Vector3d c2w(const Eigen::Vector3d v){return Tc2w_*v;}
+    inline Eigen::Matrix3d camK(){return eigK_;}
+
+    inline Eigen::Vector3d c2w(const Eigen::Vector3d v){return T_w_c_*v;}
 
     inline Eigen::Vector3d lift(const int x, const int y){return Eigen::Vector3d(ifx_*x+icx_,ify_*y+icy_,1);}
 
     inline Eigen::Vector2d project(const Eigen::Vector3d p){return Eigen::Vector2d(fx_*p[0]/p[2]+cx_,fy_*p[1]/p[2]+cy_);}
 
-    inline bool isInFrame(const Eigen::Vector2i& p, const int boundary){
-        if(p[0] >= boundary && p[0] < width_-boundary && p[1] >= boundary && p[1] < height_-boundary)
+    inline bool isInFrame(const double x, const double y, const int boundary){
+        if(x >= boundary && x < width_-boundary && y >= boundary && y < height_-boundary)
             return true;
         return false;
     }
@@ -50,6 +52,8 @@ private:
     cv::Mat K_;
     cv::Mat invK_;
 
+    Eigen::Matrix3d eigK_;
+
     double fx_, fy_, cx_, cy_;
     double ifx_, ify_, icx_, icy_;
 
@@ -61,7 +65,7 @@ private:
     std::vector<cv::Mat> grad_y_pyr_;
     int level_;
     Sophus::SE3 pose_;
-    Sophus::SE3 Tc2w_;
+    Sophus::SE3 T_w_c_;
 };
 
 
