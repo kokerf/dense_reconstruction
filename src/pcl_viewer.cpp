@@ -42,7 +42,7 @@ void PclViewer::update(const std::vector<Eigen::Vector3d> &points, const std::ve
 
         pcl::PointXYZRGBA p;
         p.x = points[i][0];
-        p.y = points[i][1];
+        p.y = -points[i][1];
         p.z = points[i][2];
 
         p.r = 200;

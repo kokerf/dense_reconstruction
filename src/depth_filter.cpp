@@ -1,12 +1,15 @@
 #include <stdlib.h>
+#include <opencv2/video.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/features2d.hpp>
 #include "depth_filter.h"
 #include "config.h"
 
 long int Seed::seed_counter = 0;
 
-void drowEpl(const Frame::Ptr& curr, const Frame::Ptr& ref, int x, int y)
+
+void drowEpl(const Frame::Ptr& curr, const Frame::Ptr& ref, Eigen::Vector2d px_cur, Eigen::Vector2d px_ref, double d)
 {
     Sophus::SE3 T_curr_ref = curr->getPose();
     cv::Mat cur_img = curr->getImageInLevel(0).clone();
@@ -15,13 +18,13 @@ void drowEpl(const Frame::Ptr& curr, const Frame::Ptr& ref, int x, int y)
     cv::cvtColor( cur_img, cur_img, CV_GRAY2BGR );
     cv::cvtColor( ref_img, ref_img, CV_GRAY2BGR );
 
-    const Eigen::Vector2d ref_px(x, y);
-    const Eigen::Vector3d ref_f = ref->lift(x, y);
-    const Eigen::Vector2d curr_px = curr->project( T_curr_ref * (100000000 * ref_f));
-    printf("(%d, %d), d = %f -> (%f, %f)\n", x, y, 0.0, curr_px[0], curr_px[1]);
-    cv::circle(ref_img, cv::Point(x, y), 3, cv::Scalar(255));
+    const Eigen::Vector3d ref_f = ref->lift(px_ref[0], px_ref[1]);
+    const Eigen::Vector2d px_cur_prj = curr->project( T_curr_ref * (d * ref_f));
+    std::cout << " (" << px_ref.transpose() << "), d = " << d << " -> (" << px_cur_prj.transpose() << ") " << "match: (" << px_cur.transpose() << ")" << std::endl;
+    cv::circle(ref_img, cv::Point(px_ref[0], px_ref[1]), 3, cv::Scalar(255));
     cv::imshow("ref_epl", ref_img);
-    cv::circle(cur_img, cv::Point(curr_px[0], curr_px[1]), 3, cv::Scalar(255));
+    cv::circle(cur_img, cv::Point(px_cur_prj[0], px_cur_prj[1]), 3, cv::Scalar(255));
+    cv::circle(cur_img, cv::Point(px_cur[0], px_cur[1]), 1, cv::Scalar(0,255,0));
 
     Eigen::Matrix3d K = ref->camK();
     // R_curr_ref
@@ -36,7 +39,7 @@ void drowEpl(const Frame::Ptr& curr, const Frame::Ptr& ref, int x, int y)
     Eigen::Matrix3d K_inv = K.inverse();
     Eigen::Matrix3d F = K_inv.transpose()*t_x*R*K_inv;
     // Vector of parameters (a, b, c) of the epipolar line in curr image in implicit form ax+by+c=0
-    Eigen::Vector3d l = F * Eigen::Vector3d(x, y, 1.0);
+    Eigen::Vector3d l = F * Eigen::Vector3d(px_ref[0], px_ref[1], 1.0);
     const double rows = cur_img.rows;
     const double cols = cur_img.cols;
     // Clipping to image
@@ -50,7 +53,7 @@ void drowEpl(const Frame::Ptr& curr, const Frame::Ptr& ref, int x, int y)
     cv::circle(cur_img, p2, 5, cv::Scalar(255));
 
     cv::imshow("curr_epl", cur_img);
-    cv::waitKey(0);
+    cv::waitKey(1);
 }
 
 //!
@@ -77,36 +80,49 @@ void DepthFilter::initSeeds(Frame::Ptr frame)
     frame_sequence_.clear();
     frame_sequence_.push_back(frame);
 
-    //const cv::Mat img = frame->getImageInLevel(0);
-    const cv::Mat gradx = frame->getGradxInLevel(0);
-    const cv::Mat grady = frame->getGradyInLevel(0);
-
     const int min_grad2 = Config::seedMinGrad()*Config::seedMinGrad();
 
-    const int cols = Config::imageWidth() - 1;
-    const int rows = Config::imageHeight() - 1;
+//    //const cv::Mat img = frame->getImageInLevel(0);
+//    const cv::Mat gradx = frame->getGradxInLevel(0);
+//    const cv::Mat grady = frame->getGradyInLevel(0);
+//
+//
+//    const int cols = Config::imageWidth() - 1;
+//    const int rows = Config::imageHeight() - 1;
 
-    for (int r = 1; r < rows; ++r)
+//    for (int r = 1; r < rows; ++r)
+//    {
+//        const float* gradx_ptr = gradx.ptr<float>(r);
+//        const float* grady_ptr = grady.ptr<float>(r);
+//
+//        for (int c = 1; c < cols; ++c)
+//        {
+//            const float dx = gradx_ptr[c];
+//            const float dy = grady_ptr[c];
+//
+//            const float grad2 = dx*dx + dy*dy;
+//
+//            if(grad2 > min_grad2)
+//            {
+//                Eigen::Vector3d ftr = frame->lift(c, r);
+//                ftr.normalize();
+//                float depth = 3;//1.0f + 1.0f * ((rand() % 100001) / 100000.0f);
+//                seeds_.push_back(Seed(frame, ftr, depth, Config::seedInitVar2()));
+//            }
+//
+//        }
+//    }
+
+
+    std::vector<cv::KeyPoint> fast_corners;
+    cv::FAST(frame->getImageInLevel(0), fast_corners, min_grad2);
+
+    for (int i = 0; i < fast_corners.size(); ++i)
     {
-        const float* gradx_ptr = gradx.ptr<float>(r);
-        const float* grady_ptr = grady.ptr<float>(r);
-
-        for (int c = 1; c < cols; ++c)
-        {
-            const float dx = gradx_ptr[c];
-            const float dy = grady_ptr[c];
-
-            const float grad2 = dx*dx + dy*dy;
-
-            if(grad2 > min_grad2)
-            {
-                Eigen::Vector3d ftr = frame->lift(c, r);
-                ftr.normalize();
-                float depth = 1.0f + 1.0f * ((rand() % 100001) / 100000.0f);
-                seeds_.push_back(Seed(frame, ftr, depth, Config::seedInitVar2()));
-            }
-
-        }
+        Eigen::Vector3d ftr = frame->lift(fast_corners[i].pt.x, fast_corners[i].pt.y);
+        ftr.normalize();
+        float depth = 1.0f + 1.0f * ((rand() % 100001) / 100000.0f);
+        seeds_.push_back(Seed(frame, ftr, depth, Config::seedInitVar2()));
     }
 }
 
@@ -118,8 +134,8 @@ void DepthFilter::addFrame(Frame::Ptr new_frame)
         return;
     }
 
-    std::vector<Seed>::iterator seed_itr = seeds_.begin();
-    std::vector<Seed>::iterator seed_end = seeds_.end();
+    std::vector<Seed>::iterator seed_itr = seeds_.begin()+599;
+    std::vector<Seed>::iterator seed_end = seeds_.begin()+600;//seeds_.end();//
     for(; seed_itr != seed_end; ++seed_itr)
     {
         //! transform from ref to cur
@@ -142,11 +158,11 @@ void DepthFilter::addFrame(Frame::Ptr new_frame)
         //double idepth_min = std::max(seed_itr->mu - 3*std::sqrt(seed_itr->sigma2), std::numeric_limits<double>::epsilon());
 
         Eigen::Vector3d ft_cur;
-        double ncc_err = 0;
+        double ncc_score = 0;
         bool succeed = searchEpipolarLine(seed_itr->frame, new_frame, T_cur_ref, ft_ref,
                                           //1.0/idepth_max, 1.0/idepth_min,
-                                          seed_itr->mu - 3*std::sqrt(seed_itr->sigma2), seed_itr->mu + 3*std::sqrt(seed_itr->sigma2),
-                                          ft_cur, ncc_err);
+                                          seed_itr->mu, seed_itr->mu - 2*std::sqrt(seed_itr->sigma2), seed_itr->mu + 2*std::sqrt(seed_itr->sigma2),
+                                          ft_cur, ncc_score);
 
         if(!succeed)
             continue;
@@ -155,16 +171,22 @@ void DepthFilter::addFrame(Frame::Ptr new_frame)
         const Sophus::SE3 T_ref_cur = seed_itr->frame->getPose() * new_frame->getPose().inverse();
         double d = triangulate(ft_ref, ft_cur, T_ref_cur);
 
+//        if(d < 0.3)
+//            std::cout << "Seed id: " << seed_itr->id  << " px: " << px_cur.transpose()<< std::endl;
+
         if(d < 0.0)
             continue;
 
-        double var = calcVariance(ft_ref, T_cur_ref, d, 1.0 - ncc_err + Config::pixelError());
+        double var = calcVariance(ft_ref, T_cur_ref, d, 1.0 - ncc_score + Config::pixelError());
 
         //double var_inverse = 0.5 * (1.0/std::max(std::numeric_limits<double>::epsilon(), z-var) - 1.0/(z+var));
 
         //if(std::abs(seed_itr->mu - z) < var + std::sqrt(seed_itr->sigma2))
-        seed_itr->update(d, var*var);
-        //std::cout << "t: " << T_cur_ref.translation().norm() <<  " d: " << d << " mu: " << seed_itr->mu << " var:" << var << " sigma:" << std::sqrt(seed_itr->sigma2) <<std::endl;
+        //seed_itr->update(d, var*var);
+        std::cout << "id: " << seed_itr->id << " ncc: " << ncc_score << std::endl;
+        std::cout << "t: " << T_cur_ref.translation().norm() <<  " d: " << d << " mu: " << seed_itr->mu << " var:" << var << " sigma:" << std::sqrt(seed_itr->sigma2) <<std::endl;
+
+        drowEpl(new_frame, seed_itr->frame, new_frame->project(ft_cur), seed_itr->frame->project(ft_ref), d);
     }
 }
 
@@ -172,6 +194,7 @@ bool DepthFilter::searchEpipolarLine(const Frame::Ptr reference,
                                      const Frame::Ptr current,
                                      const Sophus::SE3 T_cur_ref,
                                      const Eigen::Vector3d &ft_ref,
+                                     double depth,
                                      double depth_min,
                                      double depth_max,
                                      Eigen::Vector3d &ft_cur,
@@ -185,22 +208,58 @@ bool DepthFilter::searchEpipolarLine(const Frame::Ptr reference,
 
     //! in cur
     if(depth_min < 0.1) depth_min = 0.1;
+    Eigen::Vector2d px_cur = current->project(T_cur_ref * (depth * ft_ref));
     Eigen::Vector2d px_near = current->project(T_cur_ref * (depth_min * ft_ref));
     Eigen::Vector2d px_far = current->project(T_cur_ref * (depth_max * ft_ref));
 
     Eigen::Vector2d epline = px_far - px_near;
 
+    //const double fx = reference->camK()(0,0);
+    Eigen::Vector3d temp1 = T_cur_ref * (depth_min * ft_ref); temp1 = temp1/temp1[2];
+    Eigen::Vector3d temp2 = T_cur_ref * (depth_max * ft_ref); temp2 = temp2/temp2[2];
+    Eigen::Vector3d far_arror = current->lift(px_far[0], px_far[1]);
+    Eigen::Vector3d near_arror = current->lift(px_near[0], px_near[1]);
+
+    Eigen::Matrix3d far_x;
+    far_x << 0, -far_arror[2], far_arror[1],
+            far_arror[2], 0, -far_arror[0],
+            -far_arror[1], far_arror[0], 0;
+    Eigen::Vector3d v1 = far_x * near_arror; v1 /= v1[2];
+    //Eigen::Vector3d v11 = far_x * T_cur_ref.inverse().translation(); v11.normalize();
+
+    Eigen::Matrix3d ref_x;
+    ref_x << 0, -ft_ref[2], ft_ref[1],
+        ft_ref[2], 0, -ft_ref[0],
+        -ft_ref[1], ft_ref[0], 0;
+    Eigen::Vector3d v2 = (ref_x * T_cur_ref.translation()); v2.normalize();
+    v2 = T_cur_ref * v2;
+
+    std::cout << " V1: " << v1.transpose() << " V2: " << v2.transpose() << " angle: " << acos(v1.dot(v2) / (v1.norm() * v2.norm()))/M_PI*180 << std::endl;
+
     //! chech for length
     double length_epl = std::sqrt(epline[0]*epline[0] + epline[1]*epline[1]);
-    if(length_epl < 0.0)
-        return false;//TODO
+    if(length_epl < 3.0)
+    {
+        cv::Point2f p(px_ref[0], px_ref[1]);
+        cv::Point2f q;
+        bool ok = align2D(reference->getImageInLevel(0), current->getImageInLevel(0), reference->getGradxInLevel(0), reference->getGradyInLevel(0), cv::Size(10,10),
+            p, q, 0.0001, 30, false);
 
-    /*//! check for angle
+        if(!ok) return false;
+        else{
+            px_cur = Eigen::Vector2d(q.x, q.y);
+            ft_cur = current->lift(px_cur[0], px_cur[1]);
+            ft_cur.normalize();
+            return true;
+        }
+    }
+    /*
+    //! check for angle
     const cv::Mat gradx_cur = current->getGradxInLevel(0);
     const cv::Mat grady_cur = current->getGradyInLevel(0);
 
-    const double dx = interpolateMat_32f(gradx_cur, px_ref[0], px_ref[1]);
-    const double dy = interpolateMat_32f(grady_cur, px_ref[0], px_ref[1]);
+    const double dx = interpolateMat_32f(gradx_cur, px_cur[0], px_cur[1]);
+    const double dy = interpolateMat_32f(grady_cur, px_cur[0], px_cur[1]);
 
     double dot2 = dx*epline[0] + dy*epline[1];
     dot2 = dot2 * dot2;
@@ -214,13 +273,12 @@ bool DepthFilter::searchEpipolarLine(const Frame::Ptr reference,
     const double costhta2 = grad_prj2/grad2;
     //! costh = g * pl / (|pl|*|g|)
     if(costhta2 < Config::minEplAngle2())
-        return false;
-        */
+        return false;*/
 
     Eigen::Vector2d epline_nrom = epline / epline.norm();
 
     //! add little for px_far
-    px_far +=  epline_nrom;
+    //px_far +=  epline_nrom;
 
     rangePoint(px_near, epline_nrom);
 
@@ -233,46 +291,96 @@ bool DepthFilter::searchEpipolarLine(const Frame::Ptr reference,
     const cv::Mat img_ref = reference->getImageInLevel(0);
     const cv::Mat img_cur = current->getImageInLevel(0);
 
+//    Eigen::Matrix2d A_cur_ref;
+//    getWarpMatrixAffine(reference, current, px_ref, ft_ref, depth, A_cur_ref);
+
     ncc_score = -1;//std::numeric_limits<double>::max();
-    int best_match_i = 0;
-    for(double i = 0; i < length_epl;i+=0.5)
+    double ncc_score_second = -1;
+    double best_match = 0;
+    double step = 0.7;
+    if(length_epl < 3.0) step = length_epl/5;
+    for(double i = 0; i < length_epl;i += step)
     {
         Eigen::Vector2d px_cur(px_near[0] + i * epline_nrom[0], px_near[1] + i * epline_nrom[1]);
         double ncc = NCC(img_ref, img_cur, px_ref, px_cur);
 
         if(ncc > ncc_score)
         {
+            ncc_score_second = ncc_score;
             ncc_score = ncc;
-            best_match_i = i;
+            best_match = i;
         }
     }
 
-    if(ncc_score < Config::minNCCScore())
+    if(ncc_score < Config::minNCCScore())// || ncc_score_second > 0.9*ncc_score)
         return false;
 
-    // TODO
-    Eigen::Vector2d px_cur(px_near[0] + best_match_i*epline_nrom[0], px_near[1] + best_match_i*epline_nrom[1]);
+    cv::Point2f p(px_ref[0], px_ref[1]);
+    cv::Point2f q(px_near[0] + best_match*epline_nrom[0], px_near[1] + best_match*epline_nrom[1]);
+    bool ok = align2D(reference->getImageInLevel(0), current->getImageInLevel(0), reference->getGradxInLevel(0), reference->getGradyInLevel(0), cv::Size(10,10),
+                      p, q, 0.0001, 30, true);
+
+    if(ok)
+        px_cur = Eigen::Vector2d(q.x, q.y);
+    else
+        px_cur = Eigen::Vector2d(px_near[0] + best_match*epline_nrom[0], px_near[1] + best_match*epline_nrom[1]);
     ft_cur = current->lift(px_cur[0], px_cur[1]);
     ft_cur.normalize();
 
-    //std::cout << "px: " << px_ref.transpose() << " dest: " << px_cur.transpose()
-    //          << " near: " << px_near.transpose() << " far: " << px_far.transpose() << " ncc_err:" << ncc_score<< std::endl;
+    /*std::vector<uchar> status;
+    std::vector<float> error;
+    std::vector<cv::Point2f> px_refs;
+    std::vector<cv::Point2f> px_curs;
+    px_refs.push_back(cv::Point2f(px_ref[0],px_ref[1]));
+    px_curs.push_back(cv::Point2f(px_cur[0],px_cur[1]));
+    cv::TermCriteria termcrit(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01);
+    cv::calcOpticalFlowPyrLK(img_ref, img_cur,
+                             px_refs, px_curs,
+                             status, error,
+                             cv::Size(20, 20),
+                             3, termcrit);*/
+
+//    std::cout << "* px: " << px_ref.transpose() << " dest: " << px_cur.transpose()
+//              << "  near: " << px_near.transpose() << " far: " << px_far.transpose() << " epl: " << length_epl<< " ncc_err:" << ncc_score<< std::endl;
+
+
+//    //std::cout << "optical: " << px_curs[0].x << " " << px_curs[0].y << std::endl;
     //showEpipolarLine(img_ref, img_cur, px_ref, px_cur, px_near, px_far);
     //showEpipolarMatch(img_ref, img_cur, px, px_cur);
 
 
-    //drowEpl(current,reference,px[0],px[1]);
-
     return true;
+}
+
+
+double DepthFilter::triangulate1(const Eigen::Vector3d &ft_ref,
+                                const Eigen::Vector3d &ft_cur,
+                                const Sophus::SE3 &T_cur_ref)
+{
+    //! d_cur * ft_cur = d_ref * R * ft_ref  + t
+    //! => [-R*ft_ref f_cur] [d_ref, d_cur]^T = t
+    //！ A x = b
+    //! min ||Ax-b|| => AT*(Ax-b) = 0 => (AT*A)x = AT*b
+    //! x = (AT*A)^(-1) * AT*b
+
+    Eigen::Vector3d t = T_cur_ref.translation();
+    Eigen::Matrix3d R = T_cur_ref.rotation_matrix();
+
+    Eigen::Matrix<double,3,2> A;
+    A << -R * ft_ref, ft_cur;
+    const Eigen::Matrix2d AtA = A.transpose()*A;
+    if(AtA.determinant() < 0.000001)
+        return -1.0;
+    // d = - (ATA)^(-1) * AT * t
+    const Eigen::Vector2d depth = AtA.inverse()*A.transpose()*t;
+    return depth[0];
 }
 
 double DepthFilter::triangulate(const Eigen::Vector3d &ft_ref,
                                 const Eigen::Vector3d &ft_cur,
                                 const Sophus::SE3 &T_ref_cur)
 {
-    //! d_ref* ft_ref = d_cur* R * ft_cur + t
-    //! => [ft_ref -R*ft_cur] [d_ref d_cur]^T = t
-    //！ A x = b
+
     Eigen::Vector3d t = T_ref_cur.translation();
     Eigen::Matrix3d R = T_ref_cur.rotation_matrix();
     Eigen::Vector3d R_ft_cur = R * ft_cur;
@@ -302,13 +410,15 @@ double DepthFilter::triangulate(const Eigen::Vector3d &ft_ref,
     double d = estimate_ft.norm();
 
 
-    const Eigen::Vector3d a1 =  T_ref_cur.inverse().rotation_matrix() * estimate_ft + T_ref_cur.inverse().translation();
-
-    double delta1 = (ft1 - ft2).norm();
-    double delta2 = (ft1 - T_ref_cur.inverse().translation() - d_cur*ft_cur).norm();
+//    const Eigen::Vector3d a1 =  T_ref_cur.inverse().rotation_matrix() * estimate_ft + T_ref_cur.inverse().translation();
+//
+//    double delta1 = (ft1 - ft2).norm();
+//    double delta2 = (ft1 - T_ref_cur.inverse().translation() - d_cur*ft_cur).norm();
 //    std::cout<<"=======\nref: " << ft1.transpose() << " ref': " << estimate_ft.transpose() << " d1: " << d_ref << std::endl;
-//    std::cout<<"cur: " << (d_cur*ft_cur).transpose() << " cur': " << a1.transpose() << " d2:" << d_cur << " d:" << d << std::endl;
-//    std::cout<<"delta: " << (ft1 - T_ref_cur.inverse().translation()).transpose() << " e1: " << delta1 << "e2: " << delta2 <<std::endl;
+//
+//    Eigen::Vector3d a11 = (ft1 - T_ref_cur.inverse().translation()).transpose(); a11.normalize();
+//    std::cout<<"= cur: " << (d_cur*ft_cur).transpose() << " cur': " << a1.transpose() << " d2:" << d_cur << " d:" << d << std::endl;
+//    std::cout<<"= delta: " << a1.transpose() << " e1: " << delta1 << " e2: " << (a11-ft_cur).norm() <<std::endl;
 
     if(estimate_ft[2] < 0.0)
         return -d;
@@ -322,13 +432,18 @@ double DepthFilter::calcVariance(const Eigen::Vector3d &f, const Sophus::SE3 &T_
     Eigen::Matrix3d R = T_cur_ref.rotation_matrix();
 
     const Eigen::Vector3d a = d * f - t;
-    //std::cout<<"a: " << a.transpose() <<std::endl;
+    const Eigen::Vector3d a_t = T_cur_ref * (d * f);
+
     double t_norm = t.norm();
     double a_norm = a.norm();
     double alpha = acos(f.dot(t)/(t_norm)); // dot product
     double beta = acos(a.dot(-t)/(t_norm*a_norm)); // dot product
     double beta_plus = beta + atan2(1.0, 2.0*480.0)*2;//atan(px_error/(2.0*480))*2.0;
-    double gamma_plus = M_PI - alpha - beta_plus; // triangle angles sum to PI
+
+    const Eigen::Vector3d a1(a[0]/a[2], a[1]/a[2], 1);
+    double a1_norm = a1.norm()*480.0;
+    double beta_plus1 = beta + acos(1.0 -1.0/(2.0*a1_norm*a1_norm));
+    double gamma_plus = M_PI - alpha - beta_plus1; // triangle angles sum to PI
     //if(gamma_plus < 0.0) gamma_plus = 0.0000001;
     double d_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
 
@@ -369,8 +484,9 @@ void DepthFilter::rangePoint(Eigen::Vector2d& px, const Eigen::Vector2d& dir)
 
 double DepthFilter::NCC(const cv::Mat &img_ref,
                         const cv::Mat &img_cur,
-                        const Eigen::Vector2d &pt_ref,
-                        const Eigen::Vector2d &pt_cur)
+                        const Eigen::Vector2d &px_ref,
+                        const Eigen::Vector2d &px_cur)
+                        //const Eigen::Matrix2d& A_ref_cur)
 {
 
     const double ncc_area = win_size_*win_size_;
@@ -387,8 +503,10 @@ double DepthFilter::NCC(const cv::Mat &img_ref,
         {
             //value_ref[k] = *(ref_ptr+x);
             //value_cur[k] = *(cur_ptr+x);
-            value_ref[k] = interpolateMat_8u(img_ref, pt_ref[0]+x, pt_ref[1]+y);
-            value_cur[k] = interpolateMat_8u(img_cur, pt_cur[0]+x, pt_cur[1]+y);
+
+            //Eigen::Vector2d pt_cur_affine = A_ref_cur*pt_cur;
+            value_ref[k] = interpolateMat_8u(img_ref, px_ref[0]+x, px_ref[1]+y);
+            value_cur[k] = interpolateMat_8u(img_cur, px_cur[0]+x, px_cur[1]+y);
             means_ref += value_ref[k];
             means_cur += value_cur[k];
             k++;
@@ -414,7 +532,7 @@ double DepthFilter::NCC(const cv::Mat &img_ref,
     return AB/std::sqrt(AA*BB + std::numeric_limits<double>::epsilon());
 }
 
-DepthFilter DepthFilter::getWarpMatrixAffine(
+void DepthFilter::getWarpMatrixAffine(
         const Frame::Ptr reference, const Frame::Ptr current,
         const Eigen::Vector2d& px_ref, const Eigen::Vector3d& f_ref,
         const double depth_ref, Eigen::Matrix2d& A_cur_ref)
@@ -500,6 +618,93 @@ inline float DepthFilter::interpolateMat_8u(const cv::Mat& mat, const float u, c
     return w00*ptr[0] + w01*ptr[stride] + w10*ptr[1] + w11*ptr[stride + 1];
 }
 
+
+bool DepthFilter::align2D(const cv::Mat& T, const cv::Mat& I, const cv::Mat& GTx, const cv::Mat& GTy,
+             const cv::Size size, const cv::Point2f& p, cv::Point2f& q, const float EPS, const int MAX_ITER, const bool use_init)
+{
+    const int cols = size.width;
+    const int rows = size.height;
+
+    cv::Point2f start, end;
+    start.x = p.x - floor(cols/2);
+    start.y = p.y - floor(rows/2);
+    end.x = start.x + cols;
+    end.y = start.y + cols;
+
+    if(start.x < 0 || start.x > T.cols || end.y < 0 || end.y > T.rows)
+        return false;
+
+    if(!use_init)
+        q = p;// -cv::Point2f(4, 4);
+
+    cv::Mat dxy;
+    cv::Mat warpT = cv::Mat::zeros(cols, rows, CV_32FC1);
+    cv::Mat warpGx = cv::Mat::zeros(cols, rows, CV_32FC1);
+    cv::Mat warpGy = cv::Mat::zeros(cols, rows, CV_32FC1);
+    cv::Mat H = cv::Mat::zeros(2,2,CV_32FC1);
+    for(int y = 0; y < rows; ++y)
+    {
+        float* pw = warpT.ptr<float>(y);
+        float* px = warpGx.ptr<float>(y);
+        float* py = warpGy.ptr<float>(y);
+        for(int x = 0; x < cols; ++x, pw++, px++, py++)
+        {
+            (*pw) = (float)interpolateMat_8u(T, start.x+x, start.y+y);
+            (*px) = interpolateMat_32f(GTx, start.x+x, start.y+y);
+            (*py) = interpolateMat_32f(GTy, start.x+x, start.y+y);
+
+            dxy = (cv::Mat_<float>(1, 2) << (*px), (*py));
+            H += dxy.t() * dxy;
+        }
+    }
+    cv::Mat invH = H.inv();
+
+    int iter = 0;
+    cv::Mat warpI = cv::Mat(rows, cols, CV_32FC1);
+    cv::Mat next_win;
+    cv::Mat prev_win;
+    cv::Mat error;
+    while(iter++ < MAX_ITER)
+    {
+        cv::Mat Jres = cv::Mat::zeros(2, 1, CV_32FC1);
+        cv::Mat dq = cv::Mat::zeros(2, 1, CV_32FC1);
+        cv::Point2f qstart(q.x-floor(cols/2), q.y-floor(rows/2));
+        if(qstart.x < 0 || qstart.y < 0 || qstart.x+ cols > I.cols || qstart.y+rows > I.rows)
+            return false;
+
+        float mean_error=0;
+        for(int y = 0; y < rows; ++y)
+        {
+            float* pw = warpT.ptr<float>(y);
+            float* px = warpGx.ptr<float>(y);
+            float* py = warpGy.ptr<float>(y);
+            for(int x = 0; x < cols; ++x, pw++, px++, py++)
+            {
+
+                float qw = interpolateMat_8u(I, qstart.x+x, qstart.y+y);
+                float diff = *pw - qw;
+                mean_error += diff*diff;
+
+                warpI.at<float>(y, x) = qw;
+                dxy = (cv::Mat_<float>(1, 2) << (*px), (*py));
+                Jres += diff* dxy.t();
+            }
+        }
+        mean_error /= rows*cols;
+        dq = invH * Jres;
+        q.x += dq.at<float>(0, 0);
+        q.y += dq.at<float>(1, 0);
+
+        warpT.convertTo(prev_win, CV_8UC1);
+        warpI.convertTo(next_win, CV_8UC1);
+        cv::Mat error = cv::Mat(next_win.size(), CV_8SC1);
+        error = prev_win - next_win;// next_win - prev_win;
+    }
+
+    return true;
+}
+
+
 void DepthFilter::showEpipolarMatch(const cv::Mat &ref,
                                     const cv::Mat &curr,
                                     const Eigen::Vector2d &px_ref,
@@ -529,13 +734,17 @@ void DepthFilter::showEpipolarLine(const cv::Mat &ref,
     cv::cvtColor( ref, ref_show, CV_GRAY2BGR );
     cv::cvtColor( curr, curr_show, CV_GRAY2BGR );
 
-    cv::circle( ref_show, cv::Point2f(px_ref(0,0), px_ref(1,0)), 1, cv::Scalar(0,255,0), 1);
-    cv::circle( curr_show, cv::Point2f(px_curr(0,0), px_curr(1,0)), 1, cv::Scalar(0,0,250), 1);
-    cv::circle( curr_show, cv::Point2f(px_min_curr(0,0), px_min_curr(1,0)), 3, cv::Scalar(0,255,0), 1);
-    cv::circle( curr_show, cv::Point2f(px_max_curr(0,0), px_max_curr(1,0)), 3, cv::Scalar(255,0,0), 1);
-    cv::line( curr_show, cv::Point2f(px_min_curr(0,0), px_min_curr(1,0)), cv::Point2f(px_max_curr(0,0), px_max_curr(1,0)), cv::Scalar(0,255,0), 1);
+    cv::resize(ref_show, ref_show, cv::Size(ref_show.size()*2));
+    cv::resize(curr_show, curr_show, cv::Size(curr_show.size()*2));
+
+    cv::circle( ref_show, cv::Point2f(px_ref(0,0), px_ref(1,0))*2, 1, cv::Scalar(0,255,0), 1);
+    cv::circle( curr_show, cv::Point2f(px_curr(0,0), px_curr(1,0))*2, 1, cv::Scalar(0,0,250), 1);
+    cv::circle( curr_show, cv::Point2f(px_min_curr(0,0), px_min_curr(1,0))*2, 3, cv::Scalar(0,255,0), 1);
+    cv::circle( curr_show, cv::Point2f(px_max_curr(0,0), px_max_curr(1,0))*2, 3, cv::Scalar(255,0,0), 1);
+    cv::line( curr_show, cv::Point2f(px_min_curr(0,0), px_min_curr(1,0))*2, cv::Point2f(px_max_curr(0,0), px_max_curr(1,0))*2, cv::Scalar(0,255,0), 1);
+
 
     cv::imshow("ref", ref_show );
     cv::imshow("curr", curr_show );
-    cv::waitKey(1);
+    cv::waitKey(0);
 }

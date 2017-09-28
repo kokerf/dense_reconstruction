@@ -34,7 +34,7 @@ public:
 
     inline Eigen::Vector3d c2w(const Eigen::Vector3d v){return T_w_c_*v;}
 
-    inline Eigen::Vector3d lift(const int x, const int y){return Eigen::Vector3d(ifx_*x+icx_,ify_*y+icy_,1);}
+    inline Eigen::Vector3d lift(const double x, const double y){return Eigen::Vector3d(ifx_*x+icx_,ify_*y+icy_,1);}
 
     inline Eigen::Vector2d project(const Eigen::Vector3d p){return Eigen::Vector2d(fx_*p[0]/p[2]+cx_,fy_*p[1]/p[2]+cy_);}
 

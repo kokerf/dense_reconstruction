@@ -11,8 +11,8 @@ Camera.height: 480
 
 Camera.fps: 30
 
-Seed.minGrad: 60
-Seed.initVar: 4
+Seed.minGrad: 5
+Seed.initVar: 2
 
 DepthFilter.minEplGrad: 20
 DepthFilter.minEplAngle: 0.3

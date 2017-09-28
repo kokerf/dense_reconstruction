@@ -42,7 +42,7 @@ int main(int argc, char const *argv[])
     dataset[0].getPose(T_r_w);
     C2W = T_r_w.inverse();
 
-    for (std::vector<DatasetEntry>::iterator data_itr = dataset.begin(); data_itr != dataset.end(); data_itr+=2)
+    for (std::vector<DatasetEntry>::iterator data_itr = dataset.begin(); data_itr != dataset.end(); data_itr++)
     {
         cv::Mat image;
         if(!data_itr->getImage(image, cv::IMREAD_GRAYSCALE))
@@ -66,9 +66,11 @@ int main(int argc, char const *argv[])
 
         pcl_viewer.update(mpts, vars);
 
+        if(data_itr == dataset.begin()) data_itr+=3;
+
         cv::imshow("image", image);
-        cv::imshow("gradx", frame->getGradxInLevel(0));
-        cv::imshow("grady", frame->getGradyInLevel(0));
+        //cv::imshow("gradx", frame->getGradxInLevel(0));
+        //cv::imshow("grady", frame->getGradyInLevel(0));
         cv::waitKey(0);
     }
 
