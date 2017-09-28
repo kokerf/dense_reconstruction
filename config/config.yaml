@@ -16,5 +16,5 @@ Seed.initVar: 2
 
 DepthFilter.minEplGrad: 20
 DepthFilter.minEplAngle: 0.3
-DepthFilter.minNCCScore: 0.8
+DepthFilter.minNCCScore: 0.85
 DepthFilter.pixelError: 1.0

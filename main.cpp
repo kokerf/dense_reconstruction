@@ -71,7 +71,7 @@ int main(int argc, char const *argv[])
         cv::imshow("image", image);
         //cv::imshow("gradx", frame->getGradxInLevel(0));
         //cv::imshow("grady", frame->getGradyInLevel(0));
-        cv::waitKey(0);
+        cv::waitKey(1);
     }
 
 

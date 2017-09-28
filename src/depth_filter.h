@@ -62,7 +62,7 @@ public:
                             double depth, double depth_min, double depth_max,
                             Eigen::Vector3d &ft_cur, double& ncc_score);
 
-    void rangePoint(Eigen::Vector2d& px, const Eigen::Vector2d& dir);
+    void rangePoint(Eigen::Vector2d& px, const Eigen::Vector2d& direct);
 
     double NCC(const cv::Mat &img_ref, const cv::Mat &img_cur, const Eigen::Vector2d &px_ref, const Eigen::Vector2d &px_cur);//, const Eigen::Matrix2d& A_ref_cur);
 
@@ -70,11 +70,9 @@ public:
     float interpolateMat_8u(const cv::Mat& mat, const float u, const float v);
 
     bool align2D(const cv::Mat& T, const cv::Mat& I, const cv::Mat& GTx, const cv::Mat& GTy,
-                              const cv::Size size, const cv::Point2f& p, cv::Point2f& q, const float EPS, const int MAX_ITER, const bool use_init);
+                              const cv::Size size, const cv::Point2f& p, cv::Point2f& q, const float EPS, const int MAX_ITER, const bool use_init, float& error);
 
-    double triangulate1(const Eigen::Vector3d& ft_ref, const Eigen::Vector3d& ft_cur, const Sophus::SE3& T_cur_ref);
-
-    double triangulate(const Eigen::Vector3d& ft_ref, const Eigen::Vector3d& ft_cur, const Sophus::SE3& T_ref_cur);
+    double triangulate(const Eigen::Vector3d& bearing_vector_ref, const Eigen::Vector3d& bearing_vector_cur, const Sophus::SE3& T_ref_cur);
 
     double calcVariance(const Eigen::Vector3d& f, const Sophus::SE3 &T_cur_ref, const double d, double px_error);
 
