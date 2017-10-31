@@ -1,4 +1,5 @@
 #include <iostream>
+#include <thread>
 #include <math.h>
 
 #include <opencv2/opencv.hpp>
@@ -6,7 +7,7 @@
 #include "config.h"
 #include "frame.h"
 #include "data_reader.h"
-#include "pcl_viewer.h"
+#include "viewer.h"
 #include "depth_filter.h"
 
 std::string Config::FileName;
@@ -34,7 +35,9 @@ int main(int argc, char const *argv[])
         return -1;
     }
 
-    PclViewer pcl_viewer("mapping");
+    Viewer *viewer = new Viewer("mapping");
+    std::thread viewer_thread(&Viewer::run, viewer);
+
     DepthFilter depth_filter;
 
     Sophus::SE3 T_r_w;
@@ -64,7 +67,7 @@ int main(int argc, char const *argv[])
 
         depth_filter.getAllPoints(mpts, vars);
 
-        pcl_viewer.update(mpts, vars);
+        viewer->updateMapPoint(mpts, vars);
 
         cv::imshow("image", image);
         cv::imshow("gradx", frame->getGradxInLevel(0));
@@ -72,6 +75,7 @@ int main(int argc, char const *argv[])
         cv::waitKey(0);
     }
 
+    viewer_thread.join();
 
     return 0;
 }

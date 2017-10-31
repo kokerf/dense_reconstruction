@@ -19,10 +19,6 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(Sophus REQUIRED)
 include_directories(${Sophus_INCLUDE_DIR})
 
-# PCL
-find_package(PCL 1.7 REQUIRED)
-include_directories(${PCL_INCLUDE_DIRS})
-
 # add exe
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
@@ -30,10 +26,9 @@ set(SOURCE_FILES
         main.cpp
         src/frame.cpp
         src/depth_filter.cpp
-        src/pcl_viewer.cpp)
+        src/viewer.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME}
         ${OpenCV_LIBS}
-        ${Sophus_LIBRARIES}
-        ${PCL_LIBRARIES})
+        ${Sophus_LIBRARIES})
